@@ -1,5 +1,6 @@
 from enum import Enum
 import random
+from itertools import groupby
 
 settings = {
     'staring_cars': 25,
@@ -26,10 +27,31 @@ class Player(object):
     def choose_tickets(self, tickets):
         pass
 
-    def __str__(self):
+    def turn_action(self, board):
+        # Three options
+        # 1. Pick up cards
+        #   - pick up displayed or
+        # 3. Pick up tickets
+        # 4. Lay track
+        pass
+
+    def _display_hand(self) -> str:
+        """
+        A string showing the players card summary grouped by color
+        :return:
+        """
+        hand = ''
+        self.hand.sort(key=lambda x: x.color)
+        for color, group in groupby(self.hand, lambda x: x.color):
+            hand += f'{color} x{len(list(group))} '
+
+        return hand
+
+    def __repr__(self):
         return f'Name: {self.name}\n' \
                f'Score: {self.score}\n' \
-               f'Hand size: {len(self.hand)}\n'
+               f'Hand: {self._display_hand()}\n' \
+               f'Cars: {self.cars}'
 
 class ConsolePlayer(Player):
     """
@@ -39,7 +61,7 @@ class ConsolePlayer(Player):
         super().__init__(name, cars)
 
     def choose_tickets(self, tickets):
-        print('Choose destination tickets from the options below:')
+        print('Choose destination tickets from the options below.\nEnter the number of the ticket or "n" for no selection')
         for i, ticket in enumerate(tickets):
             print(i, ticket)
         selections = list()
@@ -47,9 +69,27 @@ class ConsolePlayer(Player):
         selections.append(input('Enter number to select second ticket:'))
         selections.append(input('Enter number to select third ticket:'))
 
+        for selection in selections:
+            if selection == 'n':
+                continue
+            if int(selection) in range(len(tickets)):
+                self.tickets.append(tickets[int(selection)])
+            else:
+                print(f'"{selection}" not available')
+
+    def turn_action(self, board):
+        print(f'Player: {self.name}')
+        print(f'Hand: {self._display_hand()}')
+        print(board.get_state())
+        action = input(f'Options:\n1 Pick Up Cards\n2 Lay Track\n3 Pick Up tickets\n')
+
+
 class RandomPlayer(Player):
     def __init__(self, name: str, cars: int):
         super().__init__(name, cars)
+
+    def choose_tickets(self, tickets):
+        self.tickets = random.sample(tickets, random.choice([1,2,3]))
 
 
 class Card(object):
@@ -57,9 +97,9 @@ class Card(object):
     Colors card
     """
     def __init__(self, color: Colors):
-        self.color = color
+        self.color = color.name
 
-    def __str__(self):
+    def __repr__(self):
         return f'Color: {self.color}'
 
 class Route(object):
@@ -71,13 +111,15 @@ class Route(object):
         self.city_one = city_one
         self.city_two = city_two
         self.cost = cost
-        self.color = color
+        self.color = color.name
+        self.available = True
 
-    def __str__(self):
+    def __repr__(self):
         return f'City One: {self.city_one}\n' \
                f'City Two: {self.city_two}\n' \
                f'Cost: {self.cost}\n' \
-               f'Colors: {self.color}'
+               f'Colors: {self.color}\n' \
+               f'Available: {self.available}\n'
 
 class Ticket(object):
     """
@@ -89,9 +131,9 @@ class Ticket(object):
         self.city_two = city_two
         self.value = value
 
-    def __str__(self):
+    def __repr__(self):
         return f'{self.city_one} - {self.city_two}\n' \
-               f'Value: {self.value}'
+               f'Value: {self.value}\n'
 
 class Board(object):
     """
@@ -112,11 +154,15 @@ class Board(object):
         """
         state = f'Available Cards:\n'
         for card in self.available_cards:
-            state += card.color
+            state += f'{str(card.color)} '
+        state += f'\nAvailable Routes:\n'
+        for route in self.routes:
+            if route.available:
+                state += str(route)
         return state
 
-    def __str__(self):
-        return f'Name:{self.name}\n' \
+    def __repr__(self):
+        return f'Name: {self.name}\n' \
                f'Route Count:{len(self.routes)}\n' \
 
 class AustraliaBoard(Board):
@@ -146,14 +192,25 @@ class AustraliaBoard(Board):
         self.tickets.append(Ticket('Brisbane', 'Perth', 5))
         self.tickets.append(Ticket('Brisbane', 'Hobart', 6))
         self.tickets.append(Ticket('Brisbane', 'Adelaide', 20))
+        self.tickets.append(Ticket('Brisbane', 'A', 20))
+        self.tickets.append(Ticket('Brisbane', 'B', 20))
+        self.tickets.append(Ticket('Brisbane', 'C', 20))
+        self.tickets.append(Ticket('Brisbane', 'D', 20))
         random.shuffle(self.tickets)
 
-        # set up players with starting values
+        # set up players with starting hand and tickets
         for player in self.players:
             # give players starting hand
             for i in range(5):
                 player.hand.append(self.deck.pop())
             # get players to choose destination tickets
+            player.choose_tickets(self.tickets[-3:])
+            # remove the chosen tickets from the available tickets
+            self.tickets = list(set(self.tickets) - set(player.tickets))
+
+        # set up board with cards
+        for i in range(5):
+            self.available_cards.append(self.deck.pop())
 
 
 class GuiEvent(object):
@@ -185,14 +242,15 @@ class Game(object):
         # Each player gets a turn
         for player in self.players:
             print(f"Starting new turn for {player.name}")
-
+            print(self.board.get_state())
+            player.turn_action(self.board)
+            print()
             self.turn_count += 1
+
 
         self.end_game()
 
-
-
-    def __str__(self):
+    def __repr__(self):
         return f'Name: {self.name}\n' \
                f'Player Count: {len(self.players)}\n' \
                f'Turn Count: {self.turn_count}'
@@ -205,7 +263,7 @@ def main():
 
     players = list()
     players.append(ConsolePlayer('Rodney', settings['staring_cars']))
-    players.append(Player('James', settings['staring_cars']))
+    players.append(RandomPlayer('James', settings['staring_cars']))
 
 
     b1 = AustraliaBoard(players)
